@@ -26,9 +26,9 @@ Configure it with your desired URL and initial chapter:
 {
   'leonardo-luz/read.nvim',
   opts = {
-    url = 'https://the.site.you.want.to.read', -- Required:  Your target URL
-    chapter = 1,  -- Optional: Starting chapter (defaults to 1)
-    break_point = nil  -- Optional: A string to signal the end of a chapter (defaults to nil)
+    url = 'https://your.preferred.site/chapter_%d', -- Required: Your target URL. Replace the chapter number with %d, e.g., "example://example_book_chapter_123.com" should be "example://example_book_chapter_%d.com"
+    chapter = 1,  -- Optional: The starting chapter (default is 1)
+    break_point = nil  -- Optional: A string indicating the end of a chapter (default is nil)
   }
 }
 ```
