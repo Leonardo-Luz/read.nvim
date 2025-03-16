@@ -28,7 +28,11 @@ Configure it with your desired URL and initial chapter:
   opts = {
     url = 'https://your.preferred.site/chapter_%d', -- Required: Your target URL. Replace the chapter number with %d, e.g., "example://example_book_chapter_123.com" should be "example://example_book_chapter_%d.com"
     chapter = 1,  -- Optional: The starting chapter (default is 1)
-    break_point = nil  -- Optional: A string indicating the end of a chapter (default is nil)
+    break_point = nil,  -- Optional: A string indicating the end of a chapter (default is nil)
+    replacement = {
+        ['&#8221;'] = '”', -- example
+        ['&#8220;'] = '“', -- example
+    }  -- Optional: A table to replace specific HTML entities with other characters (default is nil)
   }
 }
 ```

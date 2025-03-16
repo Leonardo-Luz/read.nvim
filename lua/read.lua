@@ -10,6 +10,7 @@ local state = {
   main_url = "",
   break_point = nil,
   chapter = 0,
+  replacement = nil,
   window_config = {
     main = {
       floating = {
@@ -62,7 +63,7 @@ end
 
 -- INFO: END PERSISTENT DATA
 --
--- INFO: START SCRAPE DATA
+-- INFO: START SCRAPE AND FORMAT DATA
 
 local scrape = function(url)
   local response = fetch(url)
@@ -89,21 +90,14 @@ local get_HTML = function(url)
     local bodyContent = string.sub(html, bodyStart + string.len("<main"), bodyEnd)
     html = bodyContent
   else
-    print("Error: <body> tags not found in HTML.")
+    print("Error: <main> tags not found in HTML.")
     html = ""
   end
 
-  local entity_map = {
-    ["&#8221;"] = "”",
-    ["&#8230;"] = "…",
-    ["&#8220;"] = "“",
-    ["&#8217;"] = "’",
-    ["&#8216;"] = "‘",
-    ["&#8211;"] = "–",
-  }
-
-  for entity, replacement in pairs(entity_map) do
-    html = html:gsub(entity, replacement)
+  if state.replacement then
+    for entity, replacement in pairs(state.replacement) do
+      html = html:gsub(entity, replacement)
+    end
   end
 
   local pTags = {}
@@ -135,7 +129,7 @@ local get_HTML = function(url)
   return pTags
 end
 
--- INFO: END SCRAPE DATA
+-- INFO: END SCRAPE AND FORMAT DATA
 --
 -- INFO: START WINDOW CONFIG
 
@@ -321,6 +315,7 @@ M.setup = function(opts)
   state.break_point = opts.break_point
   state.main_url = opts.url
   state.chapter = opts.chapter or 1
+  state.replacement = opts.replacement
 end
 
 vim.api.nvim_create_user_command("Read", M.start, {})
