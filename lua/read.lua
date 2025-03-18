@@ -56,14 +56,65 @@ end
 
 local function set_data(key, value)
   local data = read_data()
-  data[key] = value
+
+  data[tostring(data["current_id"])][key] = value
   write_data(data)
 end
+
+-- INFO:
+-- local function set_array()
+--   if data[key] == nil then
+--     data["current_id"] = #data
+--   end
+--   data[#data][key] = value
+-- end
 
 local function get_data(key)
   local data = read_data()
 
-  return data[key]
+  if data["current_id"] and data["current_id"] > 0 then
+    return data[tostring(data["current_id"])][key]
+  end
+
+  return nil
+end
+
+local function get_total()
+  local data = read_data()
+
+  if data["current_id"] then
+    table.remove(data, 1)
+  end
+
+  return data
+end
+
+local function new_data(book)
+  local data = read_data()
+
+  data["count"] = (data["count"] or 0) + 1
+  data["current_id"] = data["count"]
+  data[tostring(data["count"])] = book
+
+  vim.print(data)
+
+  write_data(data)
+end
+
+local function delete_data(id)
+  local data = read_data()
+
+  data[tostring(id)] = nil
+
+  write_data(data)
+end
+
+local function set_id(id)
+  local data = read_data()
+
+  data["current_id"] = id
+
+  write_data(data)
 end
 
 -- INFO: END PERSISTENT DATA
@@ -71,7 +122,7 @@ end
 -- INFO: START SCRAPE AND FORMAT DATA
 
 local scrape = function(url)
-  local response = fetch(url)
+  local response = fetch(url, {})
 
   if response.err then
     vim.print(response.err)
@@ -106,16 +157,6 @@ local get_HTML = function(url)
   end
 
   local pTags = {}
-
-  for pTag in html:gmatch("<h1[^>]*>(.-)</h1>") do
-    local cleanedText = pTag:gsub("<[^>]+>", "")
-
-    cleanedText = cleanedText:gsub("%s+", " "):gsub("^%s*(.-)%s*$", "%1")
-
-    table.insert(pTags, cleanedText)
-
-    break
-  end
 
   for pTag in html:gmatch("<p[^>]*>(.-)</p>") do
     local cleanedText = pTag:gsub("<[^>]+>", "")
@@ -247,7 +288,7 @@ local set_content = function()
     return
   end
 
-  local title = table.remove(lines, 1)
+  local title = get_data("title")
   local padding = (" "):rep(math.floor((state.window_config.main.opts.width - #title) / 2))
 
   vim.api.nvim_buf_set_lines(state.window_config.header.floating.buf, 0, -1, false, { padding .. title })
@@ -317,8 +358,141 @@ end
 
 -- INFO: END WINDOW CONFIG
 
+local create_prompt = function(title, callback)
+  -- Get current window size
+  -- local width = vim.api.nvim_win_get_width(0) -- Current window width
+  -- local height = vim.api.nvim_win_get_height(0) -- Current window height
+
+  local width = vim.o.columns
+  local height = vim.o.lines
+
+  local config = {
+    header = {},
+    prompt = {},
+  }
+
+  -- Set up the floating window options
+  config.header = {
+    floating = {
+      buf = -1,
+      win = -1,
+    },
+    opts = {
+      relative = "editor",
+      width = string.len(title), -- Set the width of the window to 50% of the screen
+      height = 1,
+      col = math.floor((width * 0.5) / 2) + math.floor(width * 0.2), -- Center the window horizontally
+      row = math.floor((height * 0.5)) - 0, -- Center the window vertically
+      style = "minimal",
+      zindex = 3,
+      border = { " ", " ", " ", " ", " ", "", " ", " " },
+    },
+    enter = false,
+  }
+
+  config.prompt = {
+    floating = {
+      buf = -1,
+      win = -1,
+    },
+    opts = {
+      relative = "editor",
+      width = math.floor(width * 0.4), -- Set the width of the window to 50% of the screen
+      height = 1,
+      col = math.floor((width * 0.5) / 2) + 3, -- Center the window horizontally
+      row = math.floor((height * 0.5)) + 1, -- Center the window vertically
+      style = "minimal",
+      border = "rounded",
+      zindex = 2,
+    },
+    enter = true,
+  }
+
+  for _, float in pairs(config) do
+    float.floating = floatwindow.create_floating_window(float)
+  end
+
+  vim.api.nvim_buf_set_lines(config.header.floating.buf, 0, -1, false, { title })
+
+  vim.keymap.set({ "n", "i" }, "<CR>", callback, {
+    buffer = config.prompt.floating.buf,
+  })
+
+  local exit_prompt = function()
+    for _, float in pairs(config) do
+      pcall(vim.api.nvim_win_close, float.floating.win, true)
+    end
+  end
+
+  vim.keymap.set("n", "q", function()
+    exit_prompt()
+  end, {
+    buffer = config.prompt.floating.buf,
+  })
+  vim.keymap.set("n", "<esc><esc>", function()
+    exit_prompt()
+  end, {
+    buffer = config.prompt.floating.buf,
+  })
+
+  vim.api.nvim_create_autocmd("BufLeave", {
+    buffer = config.prompt.floating.buf,
+    callback = function()
+      exit_prompt()
+    end,
+  })
+
+  return config.prompt.floating
+end
+
+M.new_book = function()
+  local book = {
+    url = nil,
+    title = nil,
+    break_point = nil,
+    chapter = 0,
+    current_pos = 1,
+  }
+
+  create_prompt("URL", function()
+    local url = string.gsub(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1], "%s", "")
+    book.url = url
+
+    create_prompt("Title", function()
+      book.title = vim.api.nvim_buf_get_lines(0, 0, -1, false)[1]
+
+      create_prompt("Optional: Break Point", function()
+        local break_point = vim.api.nvim_buf_get_lines(0, 0, -1, false)[1]
+        book.break_point = (#break_point > 0 and break_point) or nil
+
+        create_prompt("Optional: Chapter", function()
+          local chapter = tonumber(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1])
+          book.chapter = chapter
+
+          pcall(vim.api.nvim_win_close, 0, true)
+
+          if book.url and book.title then
+            new_data(book)
+            M.start()
+            return
+          end
+
+          vim.print("Error creating a new book")
+        end)
+      end)
+    end)
+  end)
+end
+
 M.start = function()
-  state.chapter = get_data("chapter") or state.chapter
+  state.chapter = get_data("chapter")
+  state.current_url = get_data("url")
+  state.break_point = get_data("break_point")
+
+  if not state.current_url then
+    M.new_book()
+    return
+  end
 
   state.window_config = window_config()
 
@@ -326,7 +500,7 @@ M.start = function()
     float.floating = floatwindow.create_floating_window(float)
   end)
 
-  local current_pos = get_data("current_pos")
+  local current_pos = get_data("current_pos") or 1
 
   remaps()
 
@@ -337,6 +511,82 @@ M.start = function()
   end
 
   vim.api.nvim_win_set_cursor(state.window_config.main.floating.win, { current_pos, 1 })
+end
+
+M.menu = function()
+  local data = get_total()
+
+  local choices = {}
+
+  if data then
+    for key, choice in pairs(data) do
+      if type(choice) == "number" then
+        goto continue
+      end
+
+      table.insert(choices, key .. " - Chapter: " .. choice.chapter .. ", Title: " .. choice.title)
+
+      ::continue::
+    end
+  end
+
+  table.insert(choices, "+ New Book")
+
+  vim.ui.select(choices, {
+    prompt = "Books",
+  }, function(choice)
+    if choice == nil then
+      return
+    end
+
+    if choice == "+ New Book" then
+      M.new_book()
+      return
+    end
+
+    local striped_id = choice:match("(%d+)")
+
+    set_id(tonumber(striped_id))
+    M.start()
+  end)
+end
+
+M.delete_menu = function()
+  local data = get_total()
+
+  local choices = {}
+
+  if data then
+    for key, choice in pairs(data) do
+      if type(choice) == "number" then
+        goto continue
+      end
+
+      table.insert(choices, key .. " - Chapter: " .. choice.chapter .. ", Title: " .. choice.title)
+
+      ::continue::
+    end
+  end
+
+  table.insert(choices, "- Cancel")
+
+  vim.ui.select(choices, {
+    prompt = "Delete Books",
+  }, function(choice)
+    if choice == nil or choice == "- Cancel" then
+      return
+    end
+
+    vim.ui.select({ "Yes", "No" }, {
+      prompt = "Do you realy want to delete the book " .. choice,
+    }, function(response)
+      if response == "Yes" then
+        local striped_id = choice:match("(%d+)")
+
+        delete_data(tonumber(striped_id))
+      end
+    end)
+  end)
 end
 
 ---comment
@@ -350,5 +600,12 @@ M.setup = function(opts)
 end
 
 vim.api.nvim_create_user_command("Read", M.start, {})
+vim.api.nvim_create_user_command("ReadNew", M.new_book, {})
+vim.api.nvim_create_user_command("ReadMenu", M.menu, {})
+vim.api.nvim_create_user_command("ReadDeleteMenu", M.delete_menu, {})
+vim.api.nvim_create_user_command("ReadData", function()
+  local data = read_data()
+  vim.print(data)
+end, {})
 
 return M
