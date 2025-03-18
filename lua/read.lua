@@ -11,6 +11,7 @@ local state = {
   break_point = nil,
   chapter = 0,
   replacement = nil,
+  style = nil,
   window_config = {
     main = {
       floating = {
@@ -30,6 +31,10 @@ local state = {
         win = -1,
       },
     },
+  },
+  cmdheight = {
+    original = vim.o.cmdheight,
+    removed = 0,
   },
   data_file = Path:new(vim.fn.stdpath("data"), "read_data.json"),
 }
@@ -145,28 +150,41 @@ local reading_progress = function()
 
   local current_progress = (pos * 100) / lines
 
-  local footer = "Progress "
+  local footer_start = "Progress "
+  local footer_end = string.format(" %d%%", current_progress)
 
-  local progress_max_size = state.window_config.footer.opts.width - #footer
+  local progress_max_size = state.window_config.footer.opts.width
+    - #footer_start
+    - #footer_end
+    - ((state.style == "float" and 0) or 2)
 
-  vim.api.nvim_buf_set_lines(
-    state.window_config.footer.floating.buf,
-    0,
-    -1,
-    false,
-    { footer .. ("#"):rep(math.floor((progress_max_size * current_progress) / 100)) }
-  )
+  local parsed_progras_percent = math.floor((progress_max_size * current_progress) / 100)
+
+  vim.api.nvim_buf_set_lines(state.window_config.footer.floating.buf, 0, -1, false, {
+    footer_start
+      .. ("#"):rep(parsed_progras_percent)
+      .. ("-"):rep(progress_max_size - parsed_progras_percent)
+      .. footer_end,
+  })
 end
 
 local window_config = function()
   local win_width = vim.api.nvim_win_get_width(0) -- Current window width
   local win_height = vim.api.nvim_win_get_height(0) -- Current window height
 
-  local float_width = math.floor(win_width * 0.8)
-  local float_height = math.floor(win_height * 0.6)
+  local float_width = win_width
+  local float_height = win_height - 4
 
-  local row = math.floor((win_height - float_height) / 2)
-  local col = math.floor((win_width - float_width) / 2)
+  local row = 3
+  local col = 1
+
+  if state.style == "float" then
+    float_width = math.floor(win_width * 0.8)
+    float_height = math.floor(win_height * 0.6)
+
+    row = math.floor((win_height - float_height) / 2)
+    col = math.floor((win_width - float_width) / 2)
+  end
 
   return {
     main = {
@@ -181,7 +199,7 @@ local window_config = function()
         row = row,
         col = col,
         style = "minimal",
-        border = "rounded",
+        border = (state.style == "float" and "rounded") or "none",
       },
       enter = true,
     },
@@ -196,7 +214,8 @@ local window_config = function()
         width = float_width,
         height = 1,
         col = col + 1,
-        row = row - 1,
+        row = row - ((state.style == "float" and 1) or 4),
+        border = (state.style == "float" and "none") or { " ", " ", " ", " ", " ", " ", " ", " " },
       },
       enter = false,
     },
@@ -210,8 +229,9 @@ local window_config = function()
         style = "minimal",
         width = float_width,
         height = 1,
-        col = col + 1,
-        row = row + float_height + 2,
+        col = col + ((state.style == "float" and 1) or 0),
+        row = row + float_height + ((state.style == "float" and 2) or 0),
+        border = (state.style == "float" and "none") or { " ", " ", " ", " ", " ", " ", " ", " " },
       },
       enter = false,
     },
@@ -240,6 +260,10 @@ local exit = function()
 
   local current_line = cursor_pos[1]
   set_data("current_pos", current_line)
+
+  if state.style == "minimal" then
+    vim.opt.cmdheight = state.cmdheight.original
+  end
 
   foreach_float(function(_, float)
     vim.api.nvim_win_close(float.floating.win, true)
@@ -308,14 +332,21 @@ M.start = function()
 
   set_content()
 
+  if state.style == "minimal" then
+    vim.opt.cmdheight = state.cmdheight.removed
+  end
+
   vim.api.nvim_win_set_cursor(state.window_config.main.floating.win, { current_pos, 1 })
 end
 
+---comment
+---@param opts { break_point: string|nil, url:string, chapter:number|nil, replacement: table|nil, style:'minimal'|'float'|nil }
 M.setup = function(opts)
   state.break_point = opts.break_point
   state.main_url = opts.url
   state.chapter = opts.chapter or 1
   state.replacement = opts.replacement
+  state.style = opts.style
 end
 
 vim.api.nvim_create_user_command("Read", M.start, {})
