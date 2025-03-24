@@ -161,13 +161,16 @@ local get_HTML = function(url)
   for pTag in html:gmatch("<p[^>]*>(.-)</p>") do
     local cleanedText = pTag:gsub("<[^>]+>", "")
 
-    cleanedText = cleanedText:gsub("%s+", " "):gsub("^%s*(.-)%s*$", "%1")
+    cleanedText = " " .. cleanedText:gsub("%s+", " "):gsub("^%s*(.-)%s*$", "%1")
 
-    if cleanedText == state.break_point then
+    if cleanedText == " " .. state.break_point then
       goto continue
     end
 
-    table.insert(pTags, cleanedText)
+    if cleanedText:len() > 0 then
+      table.insert(pTags, cleanedText)
+    end
+
     table.insert(pTags, "")
   end
   ::continue::
@@ -191,26 +194,26 @@ local reading_progress = function()
 
   local current_progress = (pos * 100) / lines
 
-  local footer_start = "Progress "
-  local footer_end = string.format(" %d%%", current_progress)
+  local footer_start = " Progress "
+  local footer_end = string.format(" %d%% ", current_progress)
 
   local progress_max_size = state.window_config.footer.opts.width
-    - #footer_start
-    - #footer_end
-    - ((state.style == "float" and 0) or 2)
+      - #footer_start
+      - #footer_end
+      - ((state.style == "float" and 0) or 2)
 
   local parsed_progras_percent = math.floor((progress_max_size * current_progress) / 100)
 
   vim.api.nvim_buf_set_lines(state.window_config.footer.floating.buf, 0, -1, false, {
     footer_start
-      .. ("#"):rep(parsed_progras_percent)
-      .. ("-"):rep(progress_max_size - parsed_progras_percent)
-      .. footer_end,
+    .. ("#"):rep(parsed_progras_percent)
+    .. ("-"):rep(progress_max_size - parsed_progras_percent)
+    .. footer_end,
   })
 end
 
 local window_config = function()
-  local win_width = vim.api.nvim_win_get_width(0) -- Current window width
+  local win_width = vim.api.nvim_win_get_width(0)   -- Current window width
   local win_height = vim.api.nvim_win_get_height(0) -- Current window height
 
   local float_width = win_width
@@ -254,9 +257,10 @@ local window_config = function()
         style = "minimal",
         width = float_width,
         height = 1,
-        col = col + 1,
+        col = col + 0,
         row = row - ((state.style == "float" and 1) or 4),
-        border = (state.style == "float" and "none") or { " ", " ", " ", " ", " ", " ", " ", " " },
+        border = (state.style == "float" and { " ", "", " ", " ", " ", " ", " ", " " })
+            or { " ", " ", " ", " ", " ", " ", " ", " " },
       },
       enter = false,
     },
@@ -270,9 +274,10 @@ local window_config = function()
         style = "minimal",
         width = float_width,
         height = 1,
-        col = col + ((state.style == "float" and 1) or 0),
+        col = col + ((state.style == "float" and 0) or 0),
         row = row + float_height + ((state.style == "float" and 2) or 0),
-        border = (state.style == "float" and "none") or { " ", " ", " ", " ", " ", " ", " ", " " },
+        border = (state.style == "float" and { " ", "", " ", " ", " ", "", " ", " " })
+            or { " ", " ", " ", " ", " ", " ", " ", " " },
       },
       enter = false,
     },
@@ -288,7 +293,7 @@ local set_content = function()
     return
   end
 
-  local title = get_data("title")
+  local title = get_data("title") .. " - " .. state.chapter
   local padding = (" "):rep(math.floor((state.window_config.main.opts.width - #title) / 2))
 
   vim.api.nvim_buf_set_lines(state.window_config.header.floating.buf, 0, -1, false, { padding .. title })
@@ -379,10 +384,10 @@ local create_prompt = function(title, callback)
     },
     opts = {
       relative = "editor",
-      width = string.len(title), -- Set the width of the window to 50% of the screen
+      width = string.len(title),                                                  -- Set the width of the window to 50% of the screen
       height = 1,
-      col = math.floor((width * 0.5) / 2) + math.floor(width * 0.2), -- Center the window horizontally
-      row = math.floor((height * 0.5)) - 0, -- Center the window vertically
+      col = math.floor((width * 0.5) / 2) + math.floor((width - #title) * 0.2),   -- Center the window horizontally
+      row = math.floor((height * 0.5)) - 0,                                       -- Center the window vertically
       style = "minimal",
       zindex = 3,
       border = { " ", " ", " ", " ", " ", "", " ", " " },
@@ -397,10 +402,10 @@ local create_prompt = function(title, callback)
     },
     opts = {
       relative = "editor",
-      width = math.floor(width * 0.4), -- Set the width of the window to 50% of the screen
+      width = math.floor(width * 0.4),         -- Set the width of the window to 50% of the screen
       height = 1,
       col = math.floor((width * 0.5) / 2) + 3, -- Center the window horizontally
-      row = math.floor((height * 0.5)) + 1, -- Center the window vertically
+      row = math.floor((height * 0.5)) + 1,    -- Center the window vertically
       style = "minimal",
       border = "rounded",
       zindex = 2,
@@ -486,7 +491,7 @@ end
 
 M.start = function()
   state.chapter = get_data("chapter")
-  state.current_url = get_data("url")
+  state.main_url = get_data("url")
   state.break_point = get_data("break_point")
 
   if not state.current_url then
